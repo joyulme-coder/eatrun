@@ -1,0 +1,1506 @@
+
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>먹으런(Eat-Run) | GPS 러닝 지도</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Routing Machine (추천 루트/화살표 라인) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+<style>
+
+:root{
+  --bg:#f6f7fb;
+  --panel:#ffffff;
+  --panel2:#f2f4f8;
+  --line:rgba(15,23,42,.10);
+  --text:#0b1220;
+  --muted:rgba(15,23,42,.60);
+  --brand:#03C75A;          /* 네이버 그린 느낌 */
+  --brand2:#00A3FF;
+  --danger:#ff3355;
+  --warn:#ffb020;
+  --shadow: 0 12px 35px rgba(15,23,42,.10);
+  --r:18px;
+  --r2:14px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", Arial, sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  overflow:hidden;
+}
+
+a{color:inherit;text-decoration:none}
+
+.app{
+  height:100%;
+  display:grid;
+  grid-template-rows: 64px 1fr;
+}
+
+.topbar{
+  position:relative;
+  z-index:50;
+  background:rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  padding:10px 14px;
+  gap:12px;
+}
+.brand{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px;
+  border-radius:999px;
+  background:linear-gradient(180deg, rgba(3,199,90,.10), rgba(3,199,90,.06));
+  border:1px solid rgba(3,199,90,.22);
+  font-weight:900;
+  letter-spacing:-.2px;
+  white-space:nowrap;
+}
+.brand .dot{
+  width:10px;height:10px;border-radius:999px;background:var(--brand);
+  box-shadow:0 0 0 4px rgba(3,199,90,.15);
+}
+
+.search{
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:10px 12px;
+  box-shadow: 0 10px 30px rgba(15,23,42,.06);
+  max-width: 740px;
+}
+.search input{
+  border:none; outline:none;
+  flex:1;
+  font-size:14px;
+  background:transparent;
+}
+.chip{
+  font-size:12px;
+  color:var(--muted);
+  padding:7px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:rgba(255,255,255,.7);
+  user-select:none;
+}
+.chip.on{
+  color:var(--text);
+  border-color: rgba(3,199,90,.35);
+  box-shadow: 0 0 0 3px rgba(3,199,90,.10) inset;
+}
+
+.actions{display:flex; align-items:center; gap:8px;}
+.btn{
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  font-weight:850;
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover{transform:translateY(-1px); box-shadow: 0 12px 26px rgba(15,23,42,.10);}
+.btn.primary{
+  border-color: rgba(3,199,90,.35);
+  background: linear-gradient(180deg, rgba(3,199,90,.12), rgba(3,199,90,.06));
+}
+.btn.danger{
+  border-color: rgba(255,51,85,.25);
+  background: linear-gradient(180deg, rgba(255,51,85,.12), rgba(255,51,85,.06));
+}
+.btn:disabled{opacity:.55; cursor:not-allowed; transform:none; box-shadow:none;}
+
+.main{
+  height:100%;
+  display:grid;
+  grid-template-columns: 380px 1fr;
+}
+@media (max-width: 980px){
+  body{overflow:auto}
+  .main{grid-template-columns: 1fr; grid-template-rows: 360px 1fr;}
+}
+
+.sidebar{
+  height:100%;
+  background:rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  border-right:1px solid var(--line);
+  box-shadow: 14px 0 40px rgba(15,23,42,.06);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.sidebar-header{
+  padding:14px 14px 10px;
+}
+.h1{
+  font-weight:950;
+  letter-spacing:-.4px;
+  font-size:16px;
+}
+.sub{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:12.5px;
+  line-height:1.55;
+}
+.levels{
+  display:flex; gap:8px; flex-wrap:wrap;
+  margin-top:10px;
+}
+.level{
+  padding:9px 10px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.75);
+  cursor:pointer;
+  user-select:none;
+  min-width: 110px;
+}
+.level .t{font-weight:950; font-size:13px;}
+.level .m{font-size:12px; color:var(--muted); margin-top:3px;}
+.level.on{
+  border-color: rgba(3,199,90,.35);
+  box-shadow: 0 0 0 3px rgba(3,199,90,.10) inset;
+}
+
+.list{
+  padding:8px 10px 14px;
+  overflow:auto;
+}
+.card{
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  background:var(--panel);
+  padding:12px 12px;
+  margin:10px 4px;
+  box-shadow: var(--shadow);
+  cursor:pointer;
+  transition: transform .12s ease;
+}
+.card:hover{transform:translateY(-1px);}
+.card.on{
+  border-color: rgba(0,163,255,.35);
+  box-shadow: 0 0 0 3px rgba(0,163,255,.10) inset, var(--shadow);
+}
+.card .title{font-weight:950; letter-spacing:-.2px;}
+.card .meta{margin-top:6px; color:var(--muted); font-size:12px; line-height:1.55;}
+
+.mapWrap{position:relative; height:100%;}
+#map{height:100%; width:100%;}
+
+.floating{
+  position:absolute;
+  right:14px;
+  top:14px;
+  z-index:1000;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.fab{
+  width:46px; height:46px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  user-select:none;
+  font-size:18px;
+}
+.fab:hover{transform:translateY(-1px);}
+
+.runSheet{
+  position:absolute;
+  left:50%;
+  transform: translateX(-50%);
+  bottom:14px;
+  z-index:1000;
+  width:min(860px, calc(100% - 28px));
+  border-radius: 22px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgba(15,23,42,.16);
+  overflow:hidden;
+}
+.runSheet .bar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+}
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 10px;
+  border-radius:999px;
+  background: rgba(3,199,90,.10);
+  border:1px solid rgba(3,199,90,.22);
+  font-weight:950;
+  font-size:12.5px;
+}
+.badge .dot{
+  width:8px;height:8px;border-radius:999px;background:var(--brand);
+  box-shadow:0 0 0 4px rgba(3,199,90,.14);
+}
+.kpis{
+  padding:12px 14px 14px;
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap:10px;
+}
+@media(max-width:980px){ .kpis{grid-template-columns: repeat(2,1fr);} }
+.kpi{
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.75);
+  border-radius: 16px;
+  padding:10px;
+}
+.kpi .l{font-size:12px; color:var(--muted); font-weight:800;}
+.kpi .v{font-size:20px; font-weight:1000; letter-spacing:-.3px; margin-top:6px;}
+.kpi .s{font-size:12px; color:var(--muted); margin-top:4px;}
+
+.toast{
+  position:absolute;
+  left:14px;
+  bottom:14px;
+  z-index:1200;
+  width:320px;
+  border-radius: 18px;
+  border:1px solid var(--line);
+  background: rgba(15,23,42,.92);
+  color: white;
+  box-shadow: 0 18px 50px rgba(0,0,0,.25);
+  padding:12px 12px;
+  display:none;
+}
+.toast.show{display:block}
+.toast .t{font-weight:950}
+.toast .m{margin-top:6px; opacity:.86; font-size:13px; line-height:1.45;}
+
+.smallNote{
+  font-size:12px;
+  color:var(--muted);
+  padding: 0 14px 14px;
+}
+
+
+/* Route summary overlay box (mid-route) */
+.routeSummaryBox{
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(15,23,42,.14);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(15,23,42,.18);
+  padding: 10px 12px;
+  min-width: 230px;
+  pointer-events: none;
+}
+.routeSummaryBox .t{font-weight:950; font-size:13px; color:#0b1220;}
+.routeSummaryBox .big{font-weight:1000; font-size:18px; margin-top:4px; color:#0b1220;}
+.routeSummaryBox .row{display:flex; justify-content:space-between; gap:10px; font-size:12px; color:rgba(15,23,42,.70); margin-top:6px;}
+.routeSummaryIcon{pointer-events:none;}
+
+
+/* --- One-file Mobile polish --- */
+:root{ --safe-top: env(safe-area-inset-top); --safe-bot: env(safe-area-inset-bottom); }
+html,body{height:100%;}
+body{margin:0; -webkit-text-size-adjust:100%;}
+/* Ensure map is visible on mobile */
+.main{height:100vh; height:100dvh;}
+header{padding-top: calc(8px + var(--safe-top));}
+/* Make controls tappable */
+button, .chip, .level{ touch-action: manipulation; }
+#map{min-height: 45vh;}
+/* If there is a bottom panel, make it scroll */
+.panel, .sidebar, #storeList{ -webkit-overflow-scrolling: touch; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- Topbar (네이버 지도 느낌: 상단 검색 + 칩) -->
+    <div class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <span>먹으런 GPS</span>
+      </div>
+
+      <div class="search" title="매장/지역 검색">
+        <span style="opacity:.65">🔎</span>
+        <input id="searchInput" placeholder="어디까지 뛰고, 뭘 먹을까요? (예: 여의도 / 치킨 / 성수)" />
+        <span class="chip" id="chipLv1">LV1</span>
+        <span class="chip" id="chipLv2">LV2</span>
+        <span class="chip" id="chipLv3">LV3</span>
+        <span class="chip" id="chipPoi" title="카카오 로컬 API로 주변 식당 표시">🍴 식당</span>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="btnReRoute" title="현재 위치 → 목적지 루트 갱신">🧭 루트</button>
+        <button class="btn primary" id="toggleFollow" data-on="1" title="내 위치를 화면이 따라옵니다">👁️ 따라가기 ON</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <!-- Sidebar (엄마의 지도 느낌: 카드형 큐레이션 리스트) -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="h1">오늘의 도착점(Goal)</div>
+          <div class="sub">
+            목적지를 선택하면 추천 루트가 표시됩니다. <br/>
+            러닝을 시작하면 초록 라인으로 실시간 트랙이 그려집니다.
+          </div>
+
+          <div class="levels" id="levels"></div>
+
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="chip on" id="levelBadge">LV.1</span>
+            <span class="chip" id="goalBadge">목적지</span>
+          </div>
+        </div>
+
+        <div class="list" id="storeList"></div>
+      </aside>
+
+      <!-- Map -->
+      <section class="mapWrap">
+        <div id="map"></div>
+
+        <div class="floating">
+          <div class="fab" id="fabLocate" title="내 위치">📍</div>
+          <div class="fab" id="fabGoal" title="목적지 보기">🎯</div>
+          <div class="fab" id="fabClear" title="트랙 초기화">🧼</div>
+        </div>
+
+        <!-- Run sheet (하단 러닝 대시보드) -->
+        <div class="runSheet">
+          <div class="bar">
+            <div class="badge"><span class="dot"></span><span id="kpiState">대기</span></div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span class="chip">추천 루트: <b id="kpiRoute">—</b></span>
+              <span class="chip">목표: <b id="kpiGoal">—</b></span>
+              <span class="chip">진행: <b id="kpiProgress">0%</b></span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn primary" id="btnStart">러닝 시작</button>
+              <button class="btn" id="btnPause" disabled>일시정지</button>
+              <button class="btn danger" id="btnStop" disabled>종료</button>
+            </div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi">
+              <div class="l">거리</div>
+              <div class="v" id="kpiDist">0.00 km</div>
+              <div class="s">초록 라인이 실제 트랙</div>
+            </div>
+            <div class="kpi">
+              <div class="l">시간</div>
+              <div class="v" id="kpiTime">0:00</div>
+              <div class="s">일시정지 시 정지</div>
+            </div>
+            <div class="kpi">
+              <div class="l">페이스</div>
+              <div class="v" id="kpiPace">--</div>
+              <div class="s">평균 페이스</div>
+            </div>
+            <div class="kpi">
+              <div class="l">GPS</div>
+              <div class="v"><span id="kpiAcc">--</span></div>
+              <div class="s">속도: <span id="kpiSpeed">--</span></div>
+            </div>
+          </div>
+
+          <div class="smallNote">
+            • 위치 기능은 <b>https</b> 또는 <b>http://localhost</b>에서만 동작합니다. <br/>
+            • MVP 부정방지: 25km/h 이상으로 이동한 구간은 거리에서 제외됩니다.
+            • 주변 식당(POI) 데이터는 카카오 로컬 API 검색 결과를 사용합니다.
+          </div>
+        </div>
+
+        <div class="toast" id="toast">
+          <div class="t" id="toastTitle"></div>
+          <div class="m" id="toastMsg"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+/* --- One-file guard --- */
+window.addEventListener('error', (e)=>{
+  try{
+    const el = document.createElement('div');
+    el.style.position='fixed'; el.style.left='12px'; el.style.right='12px';
+    el.style.bottom='12px'; el.style.zIndex=99999;
+    el.style.padding='10px 12px'; el.style.borderRadius='14px';
+    el.style.background='rgba(0,0,0,.75)'; el.style.color='white';
+    el.style.fontSize='12px';
+    el.textContent = '오류: ' + (e?.message||'스크립트 오류') + ' (모바일에서 외부 리소스가 차단되면 지도/루팅이 안 보일 수 있어요)';
+    document.body.appendChild(el);
+    setTimeout(()=>{ try{el.remove();}catch(_){} }, 6000);
+  }catch(_){}
+});
+
+
+/**
+ * Eat-Run (GPS-first) PC Web MVP
+ * - Single-page UI (Naver-map style top search + left panel + full map)
+ * - Leaflet map + Routing (OSRM via Leaflet Routing Machine)
+ * - Live GPS tracking: polyline, distance, time, pace, speed, accuracy
+ * - Gamified levels (lv1/2/3)
+ *
+ * Notes:
+ * - Geolocation works only on https or http://localhost.
+ * - Routing uses public OSRM demo server by default; for production, host your own OSRM.
+ */
+
+const LEVELS = {
+  lv1: { name: "LV.1 (3~5km)", min: 3, max: 5, rewardHint: "음료/주류 1잔 무료" },
+  lv2: { name: "LV.2 (7~10km)", min: 7, max: 10, rewardHint: "사이드 1개 무료" },
+  lv3: { name: "LV.3 (15km+)", min: 15, max: 20, rewardHint: "10~20% 할인/사이즈업" },
+};
+
+// Sample stores (서울 러닝 거점: 반포/여의도/성수)
+const STORES = [
+  {
+    "id": "sangam_dorak",
+    "name": "도락",
+    "area": "상암동",
+    "category": "한식",
+    "lat": 37.5797,
+    "lng": 126.8896,
+    "desc": "상암 DMC 러닝 후 든든한 한식 보상."
+  },
+  {
+    "id": "sangam_hoegwan",
+    "name": "상암회관",
+    "area": "상암동",
+    "category": "고기",
+    "lat": 37.5789,
+    "lng": 126.8909,
+    "desc": "장거리 러닝 후 고기 회식 명소."
+  },
+  {
+    "id": "banghwa_blackradio",
+    "name": "블랙라디오",
+    "area": "방화동",
+    "category": "카페",
+    "lat": 37.5734,
+    "lng": 126.8126,
+    "desc": "방화·마곡 러닝 후 커피 한 잔."
+  },
+  {
+    "id": "itaewon_vatos",
+    "name": "바토스 이태원",
+    "area": "이태원",
+    "category": "멕시칸",
+    "lat": 37.5345,
+    "lng": 126.9946,
+    "desc": "러닝 후 탄단지 밸런스 타코."
+  },
+  {
+    "id": "hongdae_choigori",
+    "name": "최고집 홍대",
+    "area": "홍대",
+    "category": "고기",
+    "lat": 37.5561,
+    "lng": 126.9228,
+    "desc": "젊은 러닝 크루 뒤풀이 단골."
+  },
+  {
+    "id": "yeonnam_tofu",
+    "name": "연남두부",
+    "area": "연남동",
+    "category": "한식",
+    "lat": 37.5664,
+    "lng": 126.9221,
+    "desc": "담백한 단백질 보충."
+  },
+  {
+    "id": "gangnam_hadongkwan",
+    "name": "하동관 강남",
+    "area": "강남",
+    "category": "곰탕",
+    "lat": 37.4989,
+    "lng": 127.0276,
+    "desc": "장거리 후 국물 원탑."
+  },
+  {
+    "id": "eulji_pyeongrae",
+    "name": "평래옥",
+    "area": "을지로",
+    "category": "냉면",
+    "lat": 37.5656,
+    "lng": 126.9909,
+    "desc": "서울 냉면 성지."
+  },
+  {
+    "id": "jongno_gwangjang",
+    "name": "광장시장 빈대떡",
+    "area": "종로",
+    "category": "분식",
+    "lat": 37.57,
+    "lng": 126.9996,
+    "desc": "러닝 후 가벼운 탄수화물."
+  },
+  {
+    "id": "seongsu_jayeondo",
+    "name": "자연도소금빵 성수",
+    "area": "성수",
+    "category": "베이커리",
+    "lat": 37.5446,
+    "lng": 127.0557,
+    "desc": "러닝 데이트 보상용."
+  },
+  {
+    "id": "apgujeong_gukbap",
+    "name": "압구정 현대국밥",
+    "area": "압구정",
+    "category": "국밥",
+    "lat": 37.5271,
+    "lng": 127.0289,
+    "desc": "든든한 회복식."
+  },
+  {
+    "id": "jamsil_chamsut",
+    "name": "참숯불갈비 잠실",
+    "area": "잠실",
+    "category": "고기",
+    "lat": 37.5118,
+    "lng": 127.098,
+    "desc": "석촌호수 러닝 뒤 회식."
+  },
+  {
+    "id": "sinsa_mosus",
+    "name": "모수 서울",
+    "area": "신사",
+    "category": "파인다이닝",
+    "lat": 37.5253,
+    "lng": 127.0344,
+    "desc": "20km 완주자 VIP 코스."
+  },
+  {
+    "id": "mapo_gyedong",
+    "name": "계동치킨 마포",
+    "area": "마포",
+    "category": "치킨",
+    "lat": 37.5412,
+    "lng": 126.946,
+    "desc": "한강 러닝 후 치맥."
+  },
+  {
+    "id": "dongdaemun_jinok",
+    "name": "진옥화할매닭한마리",
+    "area": "동대문",
+    "category": "닭",
+    "lat": 37.5706,
+    "lng": 127.0076,
+    "desc": "회복에 좋은 따뜻한 닭요리."
+  },
+  {
+    "id": "gwanghwamun_tosok",
+    "name": "토속촌 삼계탕",
+    "area": "광화문",
+    "category": "삼계탕",
+    "lat": 37.5764,
+    "lng": 126.9736,
+    "desc": "면역력 회복 보상."
+  },
+  {
+    "id": "yeouido_63buffet",
+    "name": "63빌딩 파빌리온",
+    "area": "여의도",
+    "category": "뷔페",
+    "lat": 37.5194,
+    "lng": 126.9408,
+    "desc": "장거리 러닝 후 올인원 보상."
+  },
+  {
+    "id": "suyu_galbi",
+    "name": "수유 돼지갈비",
+    "area": "수유",
+    "category": "고기",
+    "lat": 37.6384,
+    "lng": 127.0255,
+    "desc": "북부 러닝 크루 성지."
+  },
+  {
+    "id": "cheonho_sushi",
+    "name": "천호 스시효",
+    "area": "천호",
+    "category": "스시",
+    "lat": 37.5381,
+    "lng": 127.125,
+    "desc": "고급 단백질 보상."
+  },
+  {
+    "id": "yeoksam_pasta",
+    "name": "역삼 파스타집",
+    "area": "역삼",
+    "category": "양식",
+    "lat": 37.5003,
+    "lng": 127.0365,
+    "desc": "러닝 데이트 코스."
+  },
+  {
+    "id": "sadang_gopchang",
+    "name": "사당 곱창집",
+    "area": "사당",
+    "category": "곱창",
+    "lat": 37.4765,
+    "lng": 126.9816,
+    "desc": "장거리 후 고지방 보상."
+  },
+  {
+    "id": "cheongdam_bbq",
+    "name": "청담 바비큐",
+    "area": "청담",
+    "category": "바비큐",
+    "lat": 37.5242,
+    "lng": 127.0476,
+    "desc": "프리미엄 회복식."
+  },
+  {
+    "id": "eunpyeong_cafe",
+    "name": "은평 한옥카페",
+    "area": "은평",
+    "category": "카페",
+    "lat": 37.639,
+    "lng": 126.9395,
+    "desc": "러닝 후 힐링."
+  }
+];
+
+
+
+
+// ------- Helpers -------
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
+
+function toast(title, msg) {
+  const el = $("#toast");
+  $("#toastTitle").textContent = title;
+  $("#toastMsg").textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${pad2(s)}`;
+}
+function formatKm(n) {
+  return (Math.round(n * 100) / 100).toFixed(2);
+}
+function pace(sec, km) {
+  if (!km || km < 0.01) return "--";
+  const spk = sec / km;
+  const m = Math.floor(spk / 60);
+  const s = Math.floor(spk % 60);
+  return `${m}:${pad2(s)}/km`;
+}
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const φ1 = toRad(lat1), φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+  const a =
+    Math.sin(Δφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function destinationPoint(lat, lng, bearingDeg, distanceM){
+  const R = 6371000;
+  const br = bearingDeg * Math.PI/180;
+  const φ1 = lat * Math.PI/180;
+  const λ1 = lng * Math.PI/180;
+  const δ = distanceM / R;
+  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ) + Math.cos(φ1)*Math.sin(δ)*Math.cos(br));
+  const λ2 = λ1 + Math.atan2(Math.sin(br)*Math.sin(δ)*Math.cos(φ1), Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return { lat: (φ2*180/Math.PI), lng: (λ2*180/Math.PI) };
+}
+function withTimeout(p, ms=3500){
+  return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")), ms))]);
+}
+function polylineMeters(coords){
+  let m=0;
+  for(let i=1;i<coords.length;i++){
+    const a=coords[i-1], b=coords[i];
+    const alat = a.lat ?? a[0], alng = a.lng ?? a[1];
+    const blat = b.lat ?? b[0], blng = b.lng ?? b[1];
+    m += haversine(alat, alng, blat, blng);
+  }
+  return m;
+}
+function sampleAlong(coords, n=16){
+  if (!coords || coords.length<2) return [];
+  const pts = coords.map(c=>({lat:c.lat??c[0], lng:c.lng??c[1]}));
+  const total = polylineMeters(pts);
+  if (!total) return [pts[0], pts[pts.length-1]];
+  const step = total/(n-1);
+  const out=[pts[0]];
+  let acc=0, target=step;
+  for(let i=1;i<pts.length;i++){
+    let seg = haversine(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng);
+    while(acc + seg >= target && out.length < n-1){
+      const t = (target-acc)/(seg||1);
+      out.push({lat: pts[i-1].lat + (pts[i].lat-pts[i-1].lat)*t, lng: pts[i-1].lng + (pts[i].lng-pts[i-1].lng)*t});
+      target += step;
+    }
+    acc += seg;
+  }
+  out.push(pts[pts.length-1]);
+  return out.slice(0,n);
+}
+async function fetchElevations(points){
+  const loc = points.map(p=>`${p.lat},${p.lng}`).join("|");
+  const url = `https://api.opentopodata.org/v1/srtm90m?locations=${encodeURIComponent(loc)}`;
+  const j = await withTimeout(fetch(url).then(r=>r.json()), 4500);
+  const arr = j?.results?.map(x=>x.elevation);
+  if (!arr || arr.length < 2) throw new Error("no_elev");
+  return arr;
+}
+async function countCrossings(coords){
+  const pts = coords.map(c=>({lat:c.lat??c[0], lng:c.lng??c[1]}));
+  let minLat=90, maxLat=-90, minLng=180, maxLng=-180;
+  pts.forEach(p=>{minLat=Math.min(minLat,p.lat); maxLat=Math.max(maxLat,p.lat); minLng=Math.min(minLng,p.lng); maxLng=Math.max(maxLng,p.lng);});
+  const pad=0.01;
+  minLat-=pad; maxLat+=pad; minLng-=pad; maxLng+=pad;
+  const q = `[out:json][timeout:6];(node["highway"="crossing"](${minLat},${minLng},${maxLat},${maxLng}););out count;`;
+  const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q);
+  const j = await withTimeout(fetch(url).then(r=>r.json()), 6500);
+  const el = j?.elements?.[0];
+  const total = Number(el?.tags?.total ?? j?.elements?.length ?? 0);
+  return isFinite(total) ? total : 0;
+}
+async function computeRouteStats(coords){
+  const pts = coords.map(c=>({lat:c.lat??c[0], lng:c.lng??c[1]}));
+  const distM = polylineMeters(pts);
+  const sample = sampleAlong(pts, 16);
+  let gain=null, loss=null, avgSlope=null;
+  try{
+    const elev = await fetchElevations(sample);
+    let g=0,l=0;
+    for(let i=1;i<elev.length;i++){
+      const d=elev[i]-elev[i-1];
+      if (d>0) g+=d; else l+=(-d);
+    }
+    gain=Math.round(g); loss=Math.round(l);
+    avgSlope = (g/(distM||1))*100;
+  }catch(e){}
+  let crossings=null;
+  try{ crossings = await countCrossings(pts); }catch(e){}
+  return { distKm: distM/1000, gainM: gain, lossM: loss, avgSlope, crossings };
+}
+let routeSummaryMarker = null;
+function clearRouteSummaryBox(){
+  if (routeSummaryMarker){ try{ map.removeLayer(routeSummaryMarker);}catch(e){} routeSummaryMarker=null; }
+}
+function showRouteSummaryBox(coords, stats){
+  if (!coords || coords.length<2) return;
+  const mid = coords[Math.floor(coords.length/2)];
+  const lat = mid.lat ?? mid[0], lng = mid.lng ?? mid[1];
+  const distText = stats?.distKm ? `${stats.distKm.toFixed(1)} km` : "—";
+  const slopeText = (stats?.avgSlope!=null) ? `${stats.avgSlope.toFixed(1)}%` : "—";
+  const crossText = (stats?.crossings!=null) ? `${stats.crossings}개` : "—";
+  const gainText = (stats?.gainM!=null && stats?.lossM!=null) ? `+${stats.gainM} / -${stats.lossM}m` : "—";
+  const boxHtml = `<div class="routeSummaryBox">
+    <div class="t">📌 루트 요약</div>
+    <div class="big">${distText}</div>
+    <div class="row"><span>평균 경사</span><b>${slopeText}</b></div>
+    <div class="row"><span>건널목 수</span><b>${crossText}</b></div>
+    <div class="row"><span>상승/하강</span><b>${gainText}</b></div>
+  </div>`;
+  const icon = L.divIcon({ className:"routeSummaryIcon", html: boxHtml, iconSize:[260,1], iconAnchor:[130,0] });
+  clearRouteSummaryBox();
+  routeSummaryMarker = L.marker([lat,lng], { icon, interactive:false, keyboard:false, zIndexOffset:900 }).addTo(map);
+}
+
+
+
+// ------- State -------
+let selectedLevel = "lv1";
+let desiredKm = 5; // lv1=5, lv2=10, lv3=20
+let detourScale = 1.0; // auto-tuned so OSRM distance matches selected km
+let lastRouteTry = 0;
+function levelToKm(lv){ return (lv==="lv3")?20:(lv==="lv2")?10:5; }
+function kmToLevel(km){ return (km>=20)?"lv3":(km>=10)?"lv2":"lv1"; }
+let selectedStoreId = STORES[0].id;
+
+let map, userMarker, goalMarker, routeControl;
+let storeMarkers = new Map();
+
+let poiLayer = null;
+let poiMarkers = [];
+let poiOn = false;
+let poiQuery = ""; // if user types food keyword, we can reuse search input optionally
+
+let tracking = false;
+let paused = false;
+let watchId = null;
+let timerId = null;
+let startTs = null;
+let elapsedSec = 0;
+
+let lastFix = null;      // {lat,lng,ts,acc}
+let distanceM = 0;
+let trackLine = null;
+let trackLatLngs = [];
+
+const SPEED_CHEAT_KMH = 25;  // MVP 수준의 간단한 부정 방지
+const JITTER_M = 3;
+
+function currentStore() {
+  return STORES.find((s) => s.id === selectedStoreId) || STORES[0];
+}
+
+// ------- UI render -------
+function renderLevels() {
+  const wrap = $("#levels");
+  wrap.innerHTML = Object.entries(LEVELS)
+    .map(([k, v]) => {
+      const on = k === selectedLevel ? "on" : "";
+      return `
+      <div class="level ${on}" data-level="${k}">
+        <div class="t">${v.name}</div>
+        <div class="m">${v.rewardHint}</div>
+      </div>`;
+    })
+    .join("");
+
+  $$("#levels .level").forEach((el) => {
+    el.addEventListener("click", () => {
+      if (el.classList.contains("disabled")) return;
+      selectedLevel = el.dataset.level;
+      desiredKm = levelToKm(selectedLevel);
+      detourScale = 1.0;
+      $$("#levels .level").forEach((x) => x.classList.remove("on"));
+      el.classList.add("on");
+      $("#chipLv1").classList.toggle("on", selectedLevel === "lv1");
+      $("#chipLv2").classList.toggle("on", selectedLevel === "lv2");
+      $("#chipLv3").classList.toggle("on", selectedLevel === "lv3");
+      updateHeaderBadges();
+      if (tracking) toast("코스 변경", "러닝 중에는 권장하지 않습니다. 종료 후 다시 시작해주세요.");
+    });
+  });
+}
+
+function renderStoreList(list = STORES) {
+  const el = $("#storeList");
+  el.innerHTML = list
+    .map((s) => {
+      const on = s.id === selectedStoreId ? "on" : "";
+      const tagStr = s.tags?.slice(0, 3).map((t) => `#${t}`).join(" ");
+      return `
+      <div class="card ${on}" data-store="${s.id}">
+        <div class="title">${s.name}</div>
+        <div class="meta">📍 ${s.area} · ${s.category}<br>${s.desc}</div>
+        <div class="meta" style="margin-top:8px;color:rgba(15,23,42,.50)">${tagStr || ""}</div>
+      </div>`;
+    })
+    .join("");
+
+  $$("#storeList .card").forEach((c) => {
+    c.addEventListener("click", () => {
+      selectedStoreId = c.dataset.store;
+      $$("#storeList .card").forEach((x) => x.classList.remove("on"));
+      c.classList.add("on");
+      focusGoal();
+      buildRoute(); // update route
+      updateHeaderBadges();
+    });
+  });
+}
+
+function updateHeaderBadges() {
+  const s = currentStore();
+  $("#goalBadge").textContent = `목적지: ${s.name}`;
+  $("#levelBadge").textContent = `${LEVELS[selectedLevel].name}`;
+}
+
+function bindTopChips() {
+  $("#chipLv1").addEventListener("click", () => setLevelChip("lv1"));
+  $("#chipLv2").addEventListener("click", () => setLevelChip("lv2"));
+  $("#chipLv3").addEventListener("click", () => setLevelChip("lv3"));
+  $("#chipPoi").addEventListener("click", togglePOI);
+
+  function setLevelChip(level) {
+    selectedLevel = level;
+    $("#chipLv1").classList.toggle("on", level === "lv1");
+    $("#chipLv2").classList.toggle("on", level === "lv2");
+    $("#chipLv3").classList.toggle("on", level === "lv3");
+    renderLevels();
+    updateHeaderBadges();
+  }
+}
+
+function bindSearch() {
+  const input = $("#searchInput");
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) return renderStoreList(STORES);
+    const filtered = STORES.filter((s) =>
+      (s.name + " " + s.area + " " + s.category + " " + (s.tags || []).join(" "))
+        .toLowerCase()
+        .includes(q)
+    );
+    renderStoreList(filtered);
+  });
+}
+
+// ------- Map -------
+function initMap() {
+  const s = currentStore();
+  map = L.map("map", { zoomControl: false }).setView([s.lat, s.lng], 13);
+
+  // OSM base (가벼운 MVP)
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap",
+  }).addTo(map);
+
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+
+  // Store markers
+  STORES.forEach((store) => {
+    const m = L.marker([store.lat, store.lng]).addTo(map);
+    m.bindPopup(`<b>${store.name}</b><br>${store.area} · ${store.category}<br>${store.desc}`);
+    m.on("click", () => {
+      selectedStoreId = store.id;
+      renderStoreList(STORES);
+      focusGoal();
+      buildRoute();
+      updateHeaderBadges();
+    });
+    storeMarkers.set(store.id, m);
+  });
+
+  // Goal marker (blue-ish)
+  goalMarker = L.circleMarker([s.lat, s.lng], {
+    radius: 10,
+    color: "#0b1220",
+    weight: 2,
+    fillColor: "#00A3FF",
+    fillOpacity: 0.95,
+  }).addTo(map);
+
+  // User marker placeholder (green)
+  userMarker = L.circleMarker([s.lat, s.lng], {
+    radius: 9,
+    color: "#0b1220",
+    weight: 2,
+    fillColor: "#03C75A",
+    fillOpacity: 0.95,
+  }).addTo(map);
+
+  // Track polyline
+  trackLine = L.polyline([], { color: "#03C75A", weight: 5, opacity: 0.85 }).addTo(map);
+
+  // initial route (best-effort; needs user position)
+  buildRoute(true);
+}
+
+function focusGoal() {
+  const s = currentStore();
+  goalMarker.setLatLng([s.lat, s.lng]);
+  map.setView([s.lat, s.lng], 14, { animate: true });
+  // popup
+  const marker = storeMarkers.get(s.id);
+  if (marker) marker.openPopup();
+}
+
+function updateUserMarker(lat, lng) {
+  userMarker.setLatLng([lat, lng]);
+}
+
+function buildRoute(initial = false) {
+  const s = currentStore();
+  if (!s) return;
+  goalMarker.setLatLng([s.lat, s.lng]);
+
+  if (routeControl) {
+    try { map.removeControl(routeControl); } catch(e){}
+    routeControl = null;
+  }
+  clearRouteSummaryBox();
+
+  const start = lastFix ? L.latLng(lastFix.lat, lastFix.lng) : null;
+  const goal = L.latLng(s.lat, s.lng);
+
+  if (!start) {
+    if (!initial) toast("루트 안내", "내 위치 수신 후 추천 루트를 표시합니다.");
+    return;
+  }
+
+  // Auto change course by distance (cannot be shorter than needed)
+  const straightKm = haversine(start.lat, start.lng, goal.lat, goal.lng)/1000;
+  const needKm = straightKm * 1.15; // real route tends to be longer than straight line
+  if (desiredKm < needKm) {
+    const km = (needKm<=5)?5:(needKm<=10)?10:20;
+    selectedLevel = kmToLevel(km);
+    desiredKm = levelToKm(selectedLevel);
+      detourScale = 1.0;
+    updateHeaderBadges();
+    $("#chipLv1")?.classList.toggle("on", selectedLevel==="lv1");
+    $("#chipLv2")?.classList.toggle("on", selectedLevel==="lv2");
+    $("#chipLv3")?.classList.toggle("on", selectedLevel==="lv3");
+    $$("#levels .level").forEach(x=>x.classList.toggle("on", x.dataset.level===selectedLevel));
+    toast("코스 자동 변경", `거리 ${straightKm.toFixed(1)}km → ${LEVELS[selectedLevel].name}`);
+  }
+
+  // If user wants longer than needed, add detour points so route changes by km
+  let waypoints = [start, goal];
+  if (desiredKm > needKm + 0.25) {
+    const extraM = (desiredKm - needKm) * 1000 * detourScale;
+    const mid = L.latLng((start.lat + goal.lat)/2, (start.lng + goal.lng)/2);
+    const seed = (Math.floor((start.lat+start.lng)*100000) + Math.floor((goal.lat+goal.lng)*100000) + desiredKm*1000) % 360;
+    const legM = Math.max(650, extraM/2);
+    const p1 = destinationPoint(mid.lat, mid.lng, seed, legM);
+    const p2 = destinationPoint(mid.lat, mid.lng, (seed+140)%360, legM);
+    waypoints = [start, L.latLng(p1.lat,p1.lng), L.latLng(p2.lat,p2.lng), goal];
+  }
+
+  routeControl = L.Routing.control({
+    waypoints,
+    lineOptions: {
+      styles: [{ color: "#00A3FF", opacity: 0.8, weight: 6 }],
+      addWaypoints: false,
+      extendToWaypoints: true,
+      missingRouteTolerance: 10,
+    },
+    router: L.Routing.osrmv1({
+      serviceUrl: "https://router.project-osrm.org/route/v1",
+      profile: "foot",
+    }),
+    show: false,
+    addWaypoints: false,
+    routeWhileDragging: false,
+    fitSelectedRoutes: false,
+    showAlternatives: false,
+    createMarker: () => null,
+  }).addTo(map);
+
+  routeControl.on("routesfound", async (e) => {
+  const r = e.routes?.[0];
+  if (!r) return;
+  const distKm = (r.summary.totalDistance / 1000);
+  const timeMin = (r.summary.totalTime / 60);
+  $("#kpiRoute").textContent = `${formatKm(distKm)} km · 약 ${Math.round(timeMin)}분`;
+
+  // Auto-tune: keep OSRM route length close to selected km (within tolerance)
+  const tol = Math.max(0.35, desiredKm * 0.07); // ~7% or at least 350m
+  const now = Date.now();
+  if (now - lastRouteTry > 900) { // avoid infinite loops
+    if (Math.abs(distKm - desiredKm) > tol) {
+      lastRouteTry = now;
+      // If too short, increase detour; if too long, reduce detour
+      if (distKm < desiredKm) detourScale = Math.min(3.2, detourScale * 1.35);
+      else detourScale = Math.max(0.55, detourScale * 0.78);
+
+      // Rebuild (up to 4 attempts per selection)
+      window.__tuneCount = (window.__tuneCount || 0) + 1;
+      if (window.__tuneCount <= 4) {
+        toast("거리 보정", `선택 ${desiredKm}km에 맞추는 중… (${distKm.toFixed(1)}km)`);
+        buildRoute(true);
+        return;
+      }
+    }
+  }
+
+  // Tuning done for this route
+  window.__tuneCount = 0;
+
+  try{
+    const coords = r.coordinates || [];
+    const stats = await computeRouteStats(coords);
+    showRouteSummaryBox(coords, stats);
+  }catch(err){
+    const coords = r.coordinates || [];
+    showRouteSummaryBox(coords, { distKm });
+  }
+});
+
+routeControl.on("routingerror", () => {
+  $("#kpiRoute").textContent = "루트 계산 실패";
+  clearRouteSummaryBox();
+});
+
+  routeControl.on("routingerror", () => {
+    $("#kpiRoute").textContent = "루트 계산 실패";
+    clearRouteSummaryBox();
+  });
+}
+
+// ------- GPS Tracking -------
+function canGeo() {
+  return !!navigator.geolocation;
+}
+
+function startTracking() {
+  if (!canGeo()) {
+    toast("지원 불가", "이 브라우저는 위치 기능을 지원하지 않습니다.");
+    return;
+  }
+  if (tracking) return;
+
+  tracking = true;
+  paused = false;
+  startTs = Date.now();
+  elapsedSec = 0;
+
+  lastFix = null;
+  distanceM = 0;
+  trackLatLngs = [];
+  trackLine.setLatLngs(trackLatLngs);
+
+  $("#btnStart").disabled = true;
+  $("#btnPause").disabled = false;
+  $("#btnStop").disabled = false;
+  $("#btnPause").textContent = "일시정지";
+  $("#kpiState").textContent = "러닝 중";
+
+  toast("러닝 시작", "GPS 트래킹을 시작합니다.");
+
+  timerId = setInterval(() => {
+    if (!tracking || paused) return;
+    elapsedSec += 1;
+    updateKPIs();
+  }, 1000);
+
+  watchId = navigator.geolocation.watchPosition(onFix, onGeoErr, {
+    enableHighAccuracy: true,
+    timeout: 12000,
+    maximumAge: 800,
+  });
+}
+
+function pauseTracking() {
+  if (!tracking) return;
+  paused = !paused;
+  $("#btnPause").textContent = paused ? "재개" : "일시정지";
+  $("#kpiState").textContent = paused ? "일시정지" : "러닝 중";
+  toast(paused ? "일시정지" : "재개", paused ? "잠시 쉬어가도 됩니다." : "다시 달려볼까요?");
+}
+
+function stopTracking() {
+  if (!tracking) return;
+
+  // finalize
+  const km = distanceM / 1000;
+  const level = LEVELS[selectedLevel];
+  const ok = (selectedLevel === "lv3") ? (km >= level.min) : (km >= level.min && km <= level.max);
+
+  tracking = false;
+  paused = false;
+
+  if (timerId) clearInterval(timerId);
+  timerId = null;
+
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+
+  $("#btnStart").disabled = false;
+  $("#btnPause").disabled = true;
+  $("#btnStop").disabled = true;
+  $("#kpiState").textContent = "대기";
+
+  const result = ok ? "완주 성공 🎉" : "완주 미달";
+  const hint = ok
+    ? `거리 ${formatKm(km)}km · ${LEVELS[selectedLevel].rewardHint}`
+    : `거리 ${formatKm(km)}km (목표 ${level.min}~${level.max}km)`;
+
+  toast(result, hint);
+
+  // keep line on map; user can clear manually
+  updateKPIs(true);
+}
+
+function onFix(pos) {
+  if (!tracking || paused) {
+    // still update current position for route estimation
+    const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+    lastFix = { lat, lng, ts: pos.timestamp || Date.now(), acc };
+    updateUserMarker(lat, lng);
+    return;
+  }
+
+  const { latitude: lat, longitude: lng, accuracy: acc, speed } = pos.coords;
+  const ts = pos.timestamp || Date.now();
+
+  // Update pills
+  $("#kpiAcc").textContent = acc ? `${Math.round(acc)}m` : "--";
+  const spdKmh = (typeof speed === "number" && !Number.isNaN(speed)) ? speed * 3.6 : null;
+  $("#kpiSpeed").textContent = spdKmh ? `${spdKmh.toFixed(1)} km/h` : "--";
+
+  // Distance calc
+  const cur = { lat, lng, ts, acc };
+
+  if (lastFix) {
+    const dt = (ts - lastFix.ts) / 1000;
+    const dM = haversine(lastFix.lat, lastFix.lng, lat, lng);
+
+    // jitter filter
+    if (dM >= JITTER_M && dt > 0) {
+      const segSpeedKmh = (dM / dt) * 3.6;
+
+      // simple anti-cheat
+      if (segSpeedKmh <= SPEED_CHEAT_KMH) {
+        distanceM += dM;
+        trackLatLngs.push([lat, lng]);
+        trackLine.setLatLngs(trackLatLngs);
+
+        // smooth camera when running
+        if ($("#toggleFollow").dataset.on === "1") {
+          map.setView([lat, lng], map.getZoom(), { animate: true });
+        }
+      }
+    }
+  } else {
+    trackLatLngs.push([lat, lng]);
+    trackLine.setLatLngs(trackLatLngs);
+    // build route after first fix
+    buildRoute(true);
+  }
+
+  lastFix = cur;
+  updateUserMarker(lat, lng);
+
+  // update route occasionally
+  if (elapsedSec % 8 === 0) buildRoute(true);
+
+  updateKPIs();
+}
+
+function onGeoErr(err) {
+  toast("GPS 오류", "위치 권한을 허용했는지 확인해주세요. (https 또는 localhost 필요)");
+  $("#kpiAcc").textContent = "—";
+  $("#kpiSpeed").textContent = "—";
+}
+
+function updateKPIs(final = false) {
+  const km = distanceM / 1000;
+  $("#kpiDist").textContent = `${formatKm(km)} km`;
+  $("#kpiTime").textContent = `${formatTime(elapsedSec)}`;
+  $("#kpiPace").textContent = pace(elapsedSec, km);
+
+  const lvl = LEVELS[selectedLevel];
+  const progress = (selectedLevel === "lv3")
+    ? Math.min(1, km / lvl.min)
+    : Math.min(1, km / lvl.max);
+
+  $("#kpiGoal").textContent =
+    selectedLevel === "lv3"
+      ? `${lvl.min}km+`
+      : `${lvl.min}~${lvl.max}km`;
+
+  $("#kpiProgress").textContent = `${Math.round(progress * 100)}%`;
+
+  if (final) {
+    // no-op; keep final display
+  }
+}
+
+
+async function togglePOI() {
+  poiOn = !poiOn;
+  $("#chipPoi").classList.toggle("on", poiOn);
+
+  if (!poiOn) {
+    clearPOI();
+    toast("식당 표시", "주변 식당 표시를 끔.");
+    return;
+  }
+
+  if (!lastFix) {
+    toast("식당 표시", "내 위치를 먼저 잡아주세요. (📍 버튼)");
+    poiOn = false;
+    $("#chipPoi").classList.remove("on");
+    return;
+  }
+
+  await refreshPOI();
+}
+
+function clearPOI() {
+  if (poiLayer) {
+    try { map.removeLayer(poiLayer); } catch(e){}
+    poiLayer = null;
+  }
+  poiMarkers = [];
+}
+
+async function refreshPOI() {
+  if (!poiOn) return;
+  if (!lastFix) return;
+
+  const lat = lastFix.lat;
+  const lng = lastFix.lng;
+  const radius = 1200;
+
+  // Optional: if search input looks like a food keyword (not a store name filter),
+  // you can pass it as query by prefixing with "@" (e.g. @치킨)
+  const raw = ($("#searchInput").value || "").trim();
+  let query = "";
+  if (raw.startsWith("@")) query = raw.slice(1).trim();
+
+  const qs = new URLSearchParams({ lat: String(lat), lng: String(lng), radius: String(radius) });
+  if (query) qs.set("query", query);
+
+  try {
+    const r = await fetch(`/api/kakao/nearby?${qs.toString()}`);
+    const j = await r.json();
+
+    if (!r.ok) {
+      toast("식당 표시 실패", j?.hint ? j.hint : "서버 설정(KAKAO_REST_KEY) 또는 쿼터를 확인해주세요.");
+      return;
+    }
+
+    clearPOI();
+    poiLayer = L.layerGroup().addTo(map);
+
+    (j.places || []).forEach(p => {
+      const m = L.circleMarker([p.lat, p.lng], {
+        radius: 7,
+        color: "#0b1220",
+        weight: 2,
+        fillColor: "#FF4F00", // 포인트 컬러(음식점)
+        fillOpacity: 0.95
+      }).addTo(poiLayer);
+
+      const dist = (p.distanceM != null) ? `${p.distanceM}m` : "";
+      const addr = p.roadAddress || p.address || "";
+      const link = p.placeUrl ? `<a href="${p.placeUrl}" target="_blank" rel="noreferrer">카카오에서 보기</a>` : "";
+      m.bindPopup(`<b>🍴 ${p.name}</b><br/>${dist}<br/>${addr}<br/>${link}`);
+      poiMarkers.push(m);
+    });
+
+    toast("식당 표시", query ? `주변 '${query}' 결과를 표시합니다.` : "주변 음식점(약 1.2km) 표시 중");
+  } catch (e) {
+    toast("식당 표시 실패", "네트워크/서버 상태를 확인해주세요.");
+  }
+}
+
+
+// ------- Controls -------
+function bindControls() {
+  $("#btnStart").addEventListener("click", startTracking);
+  $("#btnPause").addEventListener("click", pauseTracking);
+  $("#btnStop").addEventListener("click", stopTracking);
+
+  $("#fabLocate").addEventListener("click", locateOnce);
+  $("#fabGoal").addEventListener("click", () => {
+    focusGoal();
+  });
+  $("#fabClear").addEventListener("click", () => {
+    trackLatLngs = [];
+    distanceM = 0;
+    elapsedSec = 0;
+    lastFix = lastFix; // keep
+    trackLine.setLatLngs([]);
+    updateKPIs();
+    toast("트랙 초기화", "러닝 선/거리/시간을 초기화했습니다.");
+  });
+
+  $("#toggleFollow").addEventListener("click", () => {
+    const on = $("#toggleFollow").dataset.on === "1";
+    $("#toggleFollow").dataset.on = on ? "0" : "1";
+    $("#toggleFollow").textContent = on ? "👁️ 따라가기 OFF" : "👁️ 따라가기 ON";
+    toast("카메라", on ? "내 위치 따라가기 OFF" : "내 위치 따라가기 ON");
+  });
+
+  $("#btnReRoute").addEventListener("click", () => {
+    if (!lastFix) return toast("루트", "내 위치 수신 후 가능합니다.");
+    buildRoute();
+    toast("추천 루트", "현재 위치 → 목적지 루트를 갱신했습니다.");
+  });
+}
+
+function locateOnce() {
+  if (!canGeo()) return toast("지원 불가", "이 브라우저는 위치 기능을 지원하지 않습니다.");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+      lastFix = { lat, lng, ts: pos.timestamp || Date.now(), acc };
+      updateUserMarker(lat, lng);
+      map.setView([lat, lng], 15, { animate: true });
+      buildRoute(true);
+      toast("내 위치", `정확도 약 ${Math.round(acc)}m`);
+    },
+    () => toast("권한 필요", "위치 권한을 허용해주세요. (https 또는 localhost)"),
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 2000 }
+  );
+}
+
+// ------- Init -------
+function init() {
+  // Top chips initial
+  $("#chipLv1").classList.add("on");
+  bindTopChips();
+  bindSearch();
+
+  renderLevels();
+  renderStoreList(STORES);
+  updateHeaderBadges();
+
+  // Map init
+  initMap();
+
+  // Buttons
+  bindControls();
+
+  // Initial KPIs
+  $("#kpiRoute").textContent = "내 위치 수신 후 표시";
+  $("#kpiState").textContent = "대기";
+  $("#kpiAcc").textContent = "--";
+  $("#kpiSpeed").textContent = "--";
+  $("#kpiGoal").textContent = `${LEVELS[selectedLevel].min}~${LEVELS[selectedLevel].max}km`;
+  $("#kpiProgress").textContent = "0%";
+  $("#kpiDist").textContent = "0.00 km";
+  $("#kpiTime").textContent = "0:00";
+  $("#kpiPace").textContent = "--";
+
+  // Friendly prompt (엄마의 지도 느낌: 안내 톤)
+  setTimeout(() => {
+    toast("시작 안내", "오른쪽 상단 📍 버튼으로 내 위치를 먼저 잡고, 하단에서 러닝 시작하세요.");
+  }, 600);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  // Load routing machine script after Leaflet exists
+  // It's included in HTML, so safe.
+  init();
+});
+
+</script>
+</body>
+</html>
